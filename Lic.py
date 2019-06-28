@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 import pyedflib
 import os
 import re
+import sys
 from scipy.stats import norm
 from xml2dataframe import XML2DataFrame
 
@@ -39,7 +40,7 @@ def create_data_frame(bdf, n_signals, ticks_b_a_a, labels, session=None, include
    if include_gauss:
        mi, sigma = calculateGauss(signal)
        data[labels[n] + "_mi"] = mi
-       data[labels[n] + "_sigma"] = simga
+       data[labels[n] + "_sigma"] = sigma
    if session is not None:
        for i in session:
            data[i] = session[i][0]
@@ -78,12 +79,16 @@ def create_data_frame_for_files(limit=100):
            ticks_b_a_a = sec_before_and_after * frequency
            ticks_end = len( bdf.readSignal(0) ) - sec_before_and_after * frequency
 
-           df = create_data_frame(bdf, n_signals, ticks_b_a_a, labels, read_session(pair[1]))
+           df = create_data_frame(bdf, n_signals, ticks_b_a_a, labels, read_session(pair[1]), include_range=True, include_gauss=True)
            dfs.append(df)
 
    return dfs
 
-write_dataframe_to_file(pd.concat(create_data_frame_for_files(50)))
+print(sys.argv)
+limit = 50
+if sys.argv[1]:
+    limit = int(sys.argv[1])
+write_dataframe_to_file(pd.concat(create_data_frame_for_files(limit)))
 #  session = read_session()
 #  df = create_data_frame()
 
