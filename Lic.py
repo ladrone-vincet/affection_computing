@@ -64,7 +64,10 @@ def classifyToClass3(feltEmo, type):
 
 def read_and_cut_signal(signal, margin):
     #TODO: cut margins
-    return signal
+    sampling = 256
+    end = len(signal) // sampling - margin
+    cut_signal = signal[margin:end]
+    return cut_signal
 
 def isExperimentOne(file):
     root = ET.parse(file).getroot()
@@ -133,10 +136,9 @@ def create_data_frame_for_files(db_path='../database', limit=100):
             labels = bdf.getSignalLabels()
 
             sec_before_and_after = 30
-            ticks_b_a_a = sec_before_and_after * frequency
 
             df, signals = create_data_frame(bdf,
-                                            ticks_b_a_a,
+                                            sec_before_and_after,
                                             read_session(pair[1]))
             dfs.append(df)
 
