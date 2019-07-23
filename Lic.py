@@ -11,27 +11,7 @@ import sys
 from scipy.stats import norm
 from xml2dataframe import XML2DataFrame
 import xml.etree.ElementTree as ET
-from abc import ABC, abstractmethod
-
-
-class SignalProcessor(ABC):
-    @abstractmethod
-    def process(self, signal, label, data):
-        pass
-
-class GaussProcessor(SignalProcessor):
-    def process(self, signal, label, data):
-        mi, sigma = norm.fit(signal)
-        data[label + '_mi'] = [mi]
-        data[label + '_sigma'] = [sigma]
-
-class RangeProcessor(SignalProcessor):
-    def process(self, signal, label, data):
-        new_range = np.ptp(signal)
-        data[label + "_range"] = new_range
-
-def calculateGauss(signal):
-    return norm.fit(signal)
+from processors import *
 
 ranges = {
         'eeg': {'ch_no': slice(0, 32), 'processor': [GaussProcessor()]},
@@ -49,22 +29,42 @@ def read_session(file):
         return xml2df.process_data()
 
 def attach_session(session, data):
-    for key in session.iloc[:, 7:12]:
-        data[key] = session[key][0]
+    # for key in session.iloc[:, 7:12]:
+    #     data[key] = session[key][0]
 
-    vlnc = float(data['feltVlnc'])
-    arsl = float(data['feltArsl'])
+    vlnc = float(session['feltVlnc'])
+    arsl = float(session['feltArsl'])
+    emo = float(session['feltEmo'])
     data['class_1_vlnc'] = '0' if vlnc >= 4.5 else '1'
     data['class_1_arls'] = '0' if arsl >= 4.5 else '1'
 
     data['class_2_vlnc'] = '2' if vlnc >= 6 else ('1' if vlnc >= 3 else '0')
     data['class_2_arsl'] = '2' if arsl >= 6 else ('1' if arsl >= 3 else '0')
-    #TODO: third class
+
+    data['class_3_vlnc'] = classifyToClass3(emo, 'vlnc')
+    data['class_3_arsl'] = classifyToClass3(emo, 'arsl')
+
+def classifyToClass3(feltEmo, type):
+    vlnc = {
+        'Clam': [0, 2, 5],
+        'Medium': [4, 11],
+        'Activated': [1, 3, 6, 12]}
+    arsl = {
+        'Unpleasent': [1, 2, 3, 5, 12],
+        'Neutral': [0, 6],
+        'Pleasent': [4, 11]}
+    cur = vlnc if type == 'vlnc' else arsl
+
+    for emoClass in cur:
+        if feltEmo in cur[emoClass]:
+            return emoClass
+
+    return None
+
 
 def read_and_cut_signal(signal, margin):
     #TODO: cut margins
     return signal
-
 
 def isExperimentOne(file):
     root = ET.parse(file).getroot()
@@ -91,7 +91,7 @@ def create_data_frame(bdf, margin, session=None):
     if session is not None:
         attach_session(session, data)
 
-    return pd.DataFrame(data)
+    return pd.DataFrame(data), signals
 
 
 def write_dataframe_to_file(df, name="df"):
@@ -99,13 +99,13 @@ def write_dataframe_to_file(df, name="df"):
         file.write(df.to_csv(index=False))
 
 
-def iterate_files(limit):
+def iterate_files(db_path, limit):
     files_paths = []
-    bdf_path = lambda ses_nr, dir: f'../database/Sessions/{ses_nr}/{dir}'
-    xml_path = lambda ses_nr: f'../database/Sessions/{ses_nr}/session.xml'
-    ses_path = lambda ses_nr: f'../database/Sessions/{ses_nr}'
+    bdf_path = lambda ses_nr, dir: f'{db_path}/Sessions/{ses_nr}/{dir}'
+    xml_path = lambda ses_nr: f'{db_path}/Sessions/{ses_nr}/session.xml'
+    ses_path = lambda ses_nr: f'{db_path}/Sessions/{ses_nr}'
 
-    sessions_dirs = os.listdir('../database/Sessions/')
+    sessions_dirs = os.listdir(f'{db_path}/Sessions')
 
     for session_number in sessions_dirs[:limit]:
         for dir_file in os.listdir(ses_path(session_number)):
@@ -118,20 +118,15 @@ def iterate_files(limit):
 
     return files_paths
 
-
-def extract_bdf(file, file_no):
-    return re.search('../database/Session/' + file_no + '/.bdf' / file)
-
-
 def is_bdf(file):
     return re.search(r'.bdf\Z', file)
 
 def is_xml(file):
     return True if re.search(r'.xml\Z', file) else False
 
-def create_data_frame_for_files(limit=100):
+def create_data_frame_for_files(db_path='../database', limit=100):
     dfs = []
-    for pair in iterate_files(limit)[:limit]:
+    for pair in iterate_files(db_path, limit)[:limit]:
         with pyedflib.EdfReader(pair[0]) as bdf:
             frequency = bdf.getSampleFrequency(0)
             n_signals = bdf.signals_in_file
@@ -140,22 +135,22 @@ def create_data_frame_for_files(limit=100):
             sec_before_and_after = 30
             ticks_b_a_a = sec_before_and_after * frequency
 
-            df = create_data_frame(bdf,
-                                   ticks_b_a_a,
-                                   read_session(pair[1]))
+            df, signals = create_data_frame(bdf,
+                                            ticks_b_a_a,
+                                            read_session(pair[1]))
             dfs.append(df)
 
-    return dfs
+    return dfs, signals
+
+if __name__ == "__main__":
+    print(sys.argv)
+    limit = 50
+    if sys.argv[1]:
+        limit = int(sys.argv[1])
+
+    frames_for_files, signals = create_data_frame_for_files(limit=limit)
+    concated_frames = pd.concat(frames_for_files)
 
 
-print(sys.argv)
-limit = 50
-if sys.argv[1]:
-    limit = int(sys.argv[1])
-
-frames_for_files = create_data_frame_for_files(limit)
-concated_frames = pd.concat(frames_for_files)
-
-
-print(f'Feautres: {concated_frames.shape[1]}')
-write_dataframe_to_file(concated_frames)
+    print(f'Feautres: {concated_frames.shape[1]}')
+    write_dataframe_to_file(concated_frames)
