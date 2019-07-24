@@ -11,10 +11,13 @@ import sys
 from scipy.stats import norm
 from xml2dataframe import XML2DataFrame
 import xml.etree.ElementTree as ET
-from processors import *
+if __name__ == "__main__":
+    from processors.processors import * 
+else:
+    from .processors.processors import *
 
 ranges = {
-        'eeg': {'ch_no': slice(0, 32), 'processor': [GaussProcessor()]},
+        'eeg': {'ch_no': slice(0, 32), 'processor': [GaussProcessor()]},#, EEGPowerProcessor()]},
         'ecg': {'ch_no': slice(33, 36), 'processor': [GaussProcessor()]},
         'gsr': {'ch_no': slice(40, 41), 'processor': [GaussProcessor(), RangeProcessor()]},
         'resp': {'ch_no': slice(44, 45), 'processor': [GaussProcessor(), RangeProcessor()]},
@@ -66,7 +69,7 @@ def read_and_cut_signal(signal, margin):
     #TODO: cut margins
     sampling = 256
     end = len(signal) // sampling - margin
-    cut_signal = signal[margin:end]
+    cut_signal = signal[margin * 256:end * 256]
     return cut_signal
 
 def isExperimentOne(file):
@@ -80,16 +83,15 @@ def create_data_frame(bdf, margin, session=None):
     data = {}
     signals = {}
     raw_signals = [read_and_cut_signal(bdf.readSignal(signal_nr), margin) for signal_nr in range(bdf.signals_in_file)]
+    sampling = 256
 
     for dimension in ranges:
         processors = ranges[dimension]['processor']
         related_channels = ranges[dimension]['ch_no']
 
         signals[dimension] = raw_signals[related_channels]
-
-        for i, signal in enumerate(signals[dimension]):
-            for processing in processors:
-                processing.process(signal, f'{dimension}_{i}', data)
+        for processing in processors:
+            processing.process(signals[dimension], f'{dimension}', data)
 
     if session is not None:
         attach_session(session, data)
@@ -131,10 +133,6 @@ def create_data_frame_for_files(db_path='../database', limit=100):
     dfs = []
     for pair in iterate_files(db_path, limit)[:limit]:
         with pyedflib.EdfReader(pair[0]) as bdf:
-            frequency = bdf.getSampleFrequency(0)
-            n_signals = bdf.signals_in_file
-            labels = bdf.getSignalLabels()
-
             sec_before_and_after = 30
 
             df, signals = create_data_frame(bdf,
