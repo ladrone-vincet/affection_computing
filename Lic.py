@@ -12,13 +12,13 @@ from scipy.stats import norm
 from xml2dataframe import XML2DataFrame
 import xml.etree.ElementTree as ET
 if __name__ == "__main__":
-    from processors.processors import * 
+    from processors.processors import *
 else:
-    from .processors.processors import *
+    from processors.processors import *
 
 ranges = {
         'eeg': {'ch_no': slice(0, 32), 'processor': [GaussProcessor()]},#, EEGPowerProcessor()]},
-        'ecg': {'ch_no': slice(33, 36), 'processor': [GaussProcessor()]},
+        'ecg': {'ch_no': slice(33, 36), 'processor': [GaussProcessor(), ECGNeuroKitProcessor()]},
         'gsr': {'ch_no': slice(40, 41), 'processor': [GaussProcessor(), RangeProcessor()]},
         'resp': {'ch_no': slice(44, 45), 'processor': [GaussProcessor(), RangeProcessor()]},
         'temp': {'ch_no': slice(45, 46), 'processor': [GaussProcessor(), RangeProcessor()]},
